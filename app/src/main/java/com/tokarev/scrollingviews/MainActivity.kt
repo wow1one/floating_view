@@ -27,8 +27,13 @@ class MainActivity : AppCompatActivity() {
                 .setFloatingContent(floatingContentView)
                 .setSnapRules(
                         listOf(
-                                FloatingView.SnapRule(FloatingView.SnapSide.Top, FloatingView.Position.Outside),
-                                FloatingView.SnapRule(FloatingView.SnapSide.CenterHorizontal)
+                                FloatingView.SnapRule(FloatingView.Side.Top, FloatingView.Position.Outside),
+                                FloatingView.SnapRule(FloatingView.Side.CenterHorizontal)
+                        )
+                )
+                .setOffsetRulesInDp(
+                        listOf(
+                                FloatingView.OffsetRule(FloatingView.Side.Bottom, 8)
                         )
                 )
                 .snapToView(scrollingView)

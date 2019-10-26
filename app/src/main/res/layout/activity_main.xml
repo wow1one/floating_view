@@ -83,9 +83,11 @@
                 android:id="@+id/scrolling_view"
                 android:layout_width="wrap_content"
                 android:layout_height="56dp"
-                android:gravity="center_vertical"
                 android:layout_gravity="center_horizontal"
-                android:text="11111111"
+                android:background="#320055FF"
+                android:gravity="center_vertical"
+                android:padding="16dp"
+                android:text="Snap View"
                 />
 
             <TextView

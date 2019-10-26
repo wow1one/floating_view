@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.Rect
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -12,28 +13,30 @@ import androidx.annotation.LayoutRes
 
 @SuppressLint("ViewConstructor")
 class FloatingView private constructor(
-        context: Context,
-        attrs: AttributeSet? = null,
-        defStyle: Int = 0
+    context: Context,
+    attrs: AttributeSet? = null,
+    defStyle: Int = 0
 ) : FrameLayout(context, attrs, defStyle) {
 
+    private lateinit var snapView: View
     private var isHidden: Boolean = false
     private var floatingContent: View? = null
     private var snapRules: List<SnapRule> = listOf(
-            SnapRule(SnapSide.Bottom, Position.Outside),
-            SnapRule(SnapSide.CenterHorizontal)
+        SnapRule(Side.Bottom, Position.Outside),
+        SnapRule(Side.CenterHorizontal)
     )
+    private var offsetRules: List<OffsetRule> = emptyList()
 
     private val snapViewRect = Rect()
     private val floatingViewParentRect = Rect()
     private val floatingViewRect = Rect()
 
     fun setFloatingContent(
-            @LayoutRes floatingContentLayoutId: Int
+        @LayoutRes floatingContentLayoutId: Int
     ): FloatingView = setFloatingContent(View.inflate(context, floatingContentLayoutId, null))
 
     fun setFloatingContent(
-            floatingContentView: View
+        floatingContentView: View
     ): FloatingView {
         floatingContent = floatingContentView
         floatingContent?.let {
@@ -42,6 +45,16 @@ class FloatingView private constructor(
         addView(floatingContent)
 
         return this
+    }
+
+    fun show() {
+        visibility = View.VISIBLE
+        isHidden = false
+    }
+
+    fun hide() {
+        visibility = View.GONE
+        isHidden = true
     }
 
     fun hideOnClick(): FloatingView {
@@ -54,13 +67,13 @@ class FloatingView private constructor(
     }
 
     fun setFloatingContentClickListener(
-            clickListener: OnClickListener
+        clickListener: OnClickListener
     ) {
         floatingContent?.setOnClickListener(clickListener)
     }
 
     fun setFloatingContentClickListener(
-            clickListener: (view: View) -> Unit
+        clickListener: (view: View) -> Unit
     ) {
         floatingContent?.apply {
             setOnClickListener { clickListener.invoke(this) }
@@ -68,60 +81,112 @@ class FloatingView private constructor(
     }
 
     fun setSnapRules(
-            rules: List<SnapRule>
+        rules: List<SnapRule>
     ): FloatingView {
         snapRules = rules
 
         return this
     }
 
-    fun snapToView(
-            snapView: View
+    fun setOffsetRulesInPx(
+        rules: List<OffsetRule>
     ): FloatingView {
+        offsetRules = rules
+
+        return this
+    }
+
+    fun setOffsetRulesInDp(
+        rules: List<OffsetRule>
+    ): FloatingView {
+        val mutableOffsetRules: MutableList<OffsetRule> = mutableListOf()
+        rules.forEach { offsetRule ->
+            val offsetInPx = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                offsetRule.offset.toFloat(),
+                resources.displayMetrics
+            )
+            mutableOffsetRules.add(OffsetRule(offsetRule.side, offsetInPx.toInt()))
+        }
+        offsetRules = mutableOffsetRules
+
+        return this
+    }
+
+    fun snapToView(
+        snapView: View
+    ): FloatingView {
+        this.snapView = snapView
         snapView.post {
-            updateFloatingContentPosition(snapView)
+            updateFloatingContentPosition()
         }
 
         snapView.viewTreeObserver.addOnScrollChangedListener {
+            if (!snapView.isShown) {
+                visibility = View.GONE
+                isHidden = true
+            }
             if (isHidden) return@addOnScrollChangedListener
 
-            updateFloatingContentPosition(snapView)
+            updateFloatingContentPosition()
         }
 
         return this
     }
 
-    private fun updateFloatingContentPosition(
-            snapView: View
-    ) {
+    fun snapViewScrolled() {
+        updateFloatingContentPosition()
+    }
+
+    private fun updateFloatingContentPosition() {
         snapView.getGlobalVisibleRect(snapViewRect)
         floatingContent?.getGlobalVisibleRect(floatingViewRect)
         (floatingContent?.parent as? ViewGroup)?.getGlobalVisibleRect(floatingViewParentRect)
-        val topOffset = floatingViewParentRect.top
 
         floatingContent?.let {
-            snapRules.forEach { snapRule ->
-                val side = snapRule.side
-                val position = snapRule.position
+            applySnapRules(it)
+            applyOffsetRules(it)
+        }
+    }
 
-                val positionOffset = when {
-                    position == Position.Outside && side == SnapSide.Left -> -it.width
-                    position == Position.Outside && side == SnapSide.Top -> -it.height
-                    position == Position.Inside && side == SnapSide.Right -> -it.width
-                    position == Position.Inside && side == SnapSide.Bottom -> -it.height
-                    side == SnapSide.CenterVertical -> -(it.height / 2)
-                    side == SnapSide.CenterHorizontal -> -(it.width / 2)
-                    else -> 0
-                }
+    private fun applySnapRules(floatingContentView: View) {
+        val topOffset = floatingViewParentRect.top
 
-                when (side) {
-                    SnapSide.Left -> it.x = snapViewRect.left.toFloat() + positionOffset
-                    SnapSide.Right -> it.x = snapViewRect.right.toFloat() + positionOffset
-                    SnapSide.Top -> it.y = snapViewRect.top.toFloat() - topOffset + positionOffset
-                    SnapSide.Bottom -> it.y = snapViewRect.bottom.toFloat() - topOffset + positionOffset
-                    SnapSide.CenterVertical -> it.y = snapViewRect.bottom.toFloat() - (snapViewRect.height() / 2) - topOffset + positionOffset
-                    SnapSide.CenterHorizontal -> it.x = snapViewRect.right.toFloat() - (snapViewRect.width() / 2) + positionOffset
-                }
+        snapRules.forEach { snapRule ->
+            val side = snapRule.side
+            val position = snapRule.position
+            val positionOffset = when {
+                position == Position.Outside && side == Side.Left -> -floatingContentView.width
+                position == Position.Outside && side == Side.Top -> -floatingContentView.height
+                position == Position.Inside && side == Side.Right -> -floatingContentView.width
+                position == Position.Inside && side == Side.Bottom -> -floatingContentView.height
+                side == Side.CenterVertical -> -(floatingContentView.height / 2)
+                side == Side.CenterHorizontal -> -(floatingContentView.width / 2)
+                else -> 0
+            }
+            when (side) {
+                Side.Left -> floatingContentView.x = snapViewRect.left.toFloat() + positionOffset
+                Side.Right -> floatingContentView.x = snapViewRect.right.toFloat() + positionOffset
+                Side.Top -> floatingContentView.y =
+                    snapViewRect.top.toFloat() - topOffset + positionOffset
+                Side.Bottom -> floatingContentView.y =
+                    snapViewRect.bottom.toFloat() - topOffset + positionOffset
+                Side.CenterVertical -> floatingContentView.y =
+                    snapViewRect.bottom.toFloat() - (snapViewRect.height() / 2) - topOffset + positionOffset
+                Side.CenterHorizontal -> floatingContentView.x =
+                    snapViewRect.right.toFloat() - (snapViewRect.width() / 2) + positionOffset
+            }
+        }
+    }
+
+    private fun applyOffsetRules(floatingContentView: View) {
+        offsetRules.forEach { offsetRule ->
+            when (offsetRule.side) {
+                Side.Left -> floatingContentView.x -= offsetRule.offset
+                Side.Right -> floatingContentView.x += offsetRule.offset
+                Side.Bottom -> floatingContentView.y += offsetRule.offset
+                Side.Top -> floatingContentView.y -= offsetRule.offset
+                else -> Unit
             }
         }
     }
@@ -129,7 +194,7 @@ class FloatingView private constructor(
     companion object {
 
         fun attachToActivity(
-                activity: Activity
+            activity: Activity
         ): FloatingView {
             val floatingViewContainer = FloatingView(activity)
             val rootLayout = activity.findViewById<ViewGroup>(android.R.id.content)
@@ -137,9 +202,18 @@ class FloatingView private constructor(
 
             return floatingViewContainer
         }
+
+        fun attachToContainer(
+            container: ViewGroup
+        ): FloatingView {
+            val floatingViewContainer = FloatingView(container.context)
+            container.addView(floatingViewContainer)
+
+            return floatingViewContainer
+        }
     }
 
-    enum class SnapSide {
+    enum class Side {
         Left, Top, Right, Bottom, CenterHorizontal, CenterVertical
     }
 
@@ -148,7 +222,12 @@ class FloatingView private constructor(
     }
 
     data class SnapRule(
-            val side: SnapSide,
-            val position: Position = Position.Outside
+        val side: Side,
+        val position: Position = Position.Outside
+    )
+
+    data class OffsetRule(
+        val side: Side,
+        val offset: Int = 0
     )
 }

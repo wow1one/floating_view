@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.graphics.Rect
+import android.os.Build
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.View
@@ -20,13 +21,13 @@ class FloatingView private constructor(
 
     private lateinit var snapView: View
     private var isHidden: Boolean = false
+    private var isSnapped: Boolean = false
     private var floatingContent: View? = null
     private var snapRules: List<SnapRule> = listOf(
         SnapRule(Side.Bottom, Position.Outside),
         SnapRule(Side.CenterHorizontal)
     )
     private var offsetRules: List<OffsetRule> = emptyList()
-
     private val snapViewRect = Rect()
     private val floatingViewParentRect = Rect()
     private val floatingViewRect = Rect()
@@ -48,8 +49,8 @@ class FloatingView private constructor(
     }
 
     fun show() {
-        visibility = View.VISIBLE
         isHidden = false
+        visibility = View.VISIBLE
     }
 
     fun hide() {
@@ -117,13 +118,13 @@ class FloatingView private constructor(
         snapView: View
     ): FloatingView {
         this.snapView = snapView
+        visibility = INVISIBLE
         snapView.post {
             updateFloatingContentPosition()
         }
-
         snapView.viewTreeObserver.addOnScrollChangedListener {
             if (!snapView.isShown) {
-                visibility = View.GONE
+                visibility = GONE
                 isHidden = true
             }
             if (isHidden) return@addOnScrollChangedListener
@@ -146,6 +147,13 @@ class FloatingView private constructor(
         floatingContent?.let {
             applySnapRules(it)
             applyOffsetRules(it)
+        }
+
+        changeVisibilityBySnapViewPosition()
+
+        if (!isSnapped) {
+            isSnapped = true
+            show()
         }
     }
 
@@ -179,6 +187,16 @@ class FloatingView private constructor(
         }
     }
 
+    private fun changeVisibilityBySnapViewPosition() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) return
+
+        if (snapView.top == snapViewRect.top) {
+            visibility = GONE
+        } else if (!isHidden) {
+            visibility = VISIBLE
+        }
+    }
+
     private fun applyOffsetRules(floatingContentView: View) {
         offsetRules.forEach { offsetRule ->
             when (offsetRule.side) {
@@ -196,20 +214,20 @@ class FloatingView private constructor(
         fun attachToActivity(
             activity: Activity
         ): FloatingView {
-            val floatingViewContainer = FloatingView(activity)
+            val floatingView = FloatingView(activity)
             val rootLayout = activity.findViewById<ViewGroup>(android.R.id.content)
-            rootLayout.addView(floatingViewContainer)
+            rootLayout.addView(floatingView)
 
-            return floatingViewContainer
+            return floatingView
         }
 
         fun attachToContainer(
             container: ViewGroup
         ): FloatingView {
-            val floatingViewContainer = FloatingView(container.context)
-            container.addView(floatingViewContainer)
+            val floatingView = FloatingView(container.context)
+            container.addView(floatingView)
 
-            return floatingViewContainer
+            return floatingView
         }
     }
 
